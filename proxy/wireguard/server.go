@@ -232,10 +232,25 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	return nil
 }
 
+// PeerStats reports cumulative per-peer rx/tx bytes from the running device.
+func (s *Server) PeerStats() ([]PeerStatSnapshot, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dev == nil {
+		return nil, errors.New("wireguard device is not initialized")
+	}
+	raw, err := s.dev.IpcGet()
+	if err != nil {
+		return nil, err
+	}
+	return parsePeerStatsIPC(raw)
+}
+
 // Close implements common.Closable.Close.
 func (s *Server) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	unregisterPeerStatsProvider(s.tag, s)
 	if s.dev != nil {
 		s.dev.Close()
 		s.dev = nil
@@ -323,6 +338,7 @@ func (s *Server) Start() error {
 	}
 	s.dev = dev
 	createForwarder(s.stack, s.HandleConnection)
+	registerPeerStatsProvider(s.tag, s)
 	return nil
 }
 
